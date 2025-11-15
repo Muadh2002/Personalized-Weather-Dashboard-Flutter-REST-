@@ -31,22 +31,55 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
   void _calculateCoordinates() {
     final index = _indexController.text.trim();
+    if (index.isEmpty) {
+      setState(() {
+        _latitude = null;
+        _longitude = null;
+        _requestUrl = null;
+        _errorMessage = null;
+      });
+      return;
+    }
+
     if (index.length >= 4) {
       try {
         final firstTwo = int.parse(index.substring(0, 2));
         final nextTwo = int.parse(index.substring(2, 4));
+
+        // Validate reasonable coordinate ranges
+        if (firstTwo < 0 || firstTwo > 99 || nextTwo < 0 || nextTwo > 99) {
+          setState(() {
+            _latitude = null;
+            _longitude = null;
+            _requestUrl = null;
+            _errorMessage = 'Index numbers must be between 00 and 99.';
+          });
+          return;
+        }
 
         setState(() {
           _latitude = 5 + (firstTwo / 10.0);
           _longitude = 79 + (nextTwo / 10.0);
           _requestUrl =
               'https://api.open-meteo.com/v1/forecast?latitude=${_latitude!.toStringAsFixed(1)}&longitude=${_longitude!.toStringAsFixed(1)}&current_weather=true';
+          _errorMessage = null;
         });
       } catch (e) {
         setState(() {
-          _errorMessage = 'Invalid index format';
+          _latitude = null;
+          _longitude = null;
+          _requestUrl = null;
+          _errorMessage =
+              'Invalid index format. Please use numeric characters.';
         });
       }
+    } else {
+      setState(() {
+        _latitude = null;
+        _longitude = null;
+        _requestUrl = null;
+        _errorMessage = null;
+      });
     }
   }
 
@@ -78,18 +111,12 @@ class _WeatherScreenState extends State<WeatherScreen> {
       setState(() {
         _weatherData = weatherData;
         _isLoading = false;
+        _errorMessage = null;
       });
     } catch (e) {
-      // Check if we have cached data
-      final cachedData = await _weatherService.getCachedWeather();
       setState(() {
         _isLoading = false;
-        if (cachedData != null) {
-          _weatherData = cachedData;
-          _errorMessage = 'Network error. Showing cached data.';
-        } else {
-          _errorMessage = e.toString();
-        }
+        _errorMessage = 'Error: ${e.toString()}';
       });
     }
   }
@@ -129,8 +156,16 @@ class _WeatherScreenState extends State<WeatherScreen> {
                         labelText: 'Enter Index Number',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.person),
+                        helperText: 'e.g., 224127A',
                       ),
+                      keyboardType: TextInputType.text,
+                      textInputAction: TextInputAction.done,
                       onChanged: (value) => _calculateCoordinates(),
+                      onSubmitted: (value) {
+                        if (_latitude != null && _longitude != null) {
+                          _fetchWeather();
+                        }
+                      },
                     ),
                   ],
                 ),
@@ -215,17 +250,40 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 textStyle: const TextStyle(fontSize: 18),
               ),
             ),
+
+            // Refresh Button (when data is already loaded)
+            if (_weatherData != null && !_isLoading)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: OutlinedButton.icon(
+                  onPressed: _fetchWeather,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh Data'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
             const SizedBox(height: 16),
 
             // Error Message
             if (_errorMessage != null)
               Card(
-                color: Colors.orange.shade100,
+                color: _errorMessage!.contains('Error')
+                    ? Colors.red.shade100
+                    : Colors.orange.shade100,
                 child: Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Row(
                     children: [
-                      const Icon(Icons.warning, color: Colors.orange),
+                      Icon(
+                        _errorMessage!.contains('Error')
+                            ? Icons.error
+                            : Icons.warning,
+                        color: _errorMessage!.contains('Error')
+                            ? Colors.red
+                            : Colors.orange,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(

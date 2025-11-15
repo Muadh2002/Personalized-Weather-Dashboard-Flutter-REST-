@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/weather_data.dart';
@@ -12,17 +13,27 @@ class WeatherService {
 
     try {
       final response = await http.get(Uri.parse(url)).timeout(
-            const Duration(seconds: 10),
-          );
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception(
+              'Request timeout - please check your internet connection');
+        },
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+
+        // Validate response structure
+        if (data['current_weather'] == null) {
+          throw Exception('Invalid response format from weather API');
+        }
+
         final currentWeather = data['current_weather'];
 
         final weatherData = WeatherData(
-          temperature: currentWeather['temperature'].toDouble(),
-          windSpeed: currentWeather['windspeed'].toDouble(),
-          weatherCode: currentWeather['weathercode'],
+          temperature: (currentWeather['temperature'] as num).toDouble(),
+          windSpeed: (currentWeather['windspeed'] as num).toDouble(),
+          weatherCode: currentWeather['weathercode'] as int,
           lastUpdated: DateTime.now(),
           isCached: false,
         );
@@ -32,13 +43,14 @@ class WeatherService {
 
         return weatherData;
       } else {
-        throw Exception('Failed to load weather data: ${response.statusCode}');
+        throw Exception(
+            'Failed to load weather data: HTTP ${response.statusCode}');
       }
     } catch (e) {
       // Try to return cached data if available
       final cachedData = await getCachedWeather();
       if (cachedData != null) {
-        throw Exception('Network error. Showing cached data.');
+        return cachedData.copyWith(isCached: true);
       }
       throw Exception('Failed to fetch weather: $e');
     }
@@ -60,7 +72,8 @@ class WeatherService {
         return WeatherData.fromJson(json);
       }
     } catch (e) {
-      print('Error loading cached data: $e');
+      // Silently fail and return null if cache is corrupted
+      debugPrint('Error loading cached data: $e');
     }
     return null;
   }

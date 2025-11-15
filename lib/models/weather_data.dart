@@ -24,10 +24,10 @@ class WeatherData {
 
   factory WeatherData.fromJson(Map<String, dynamic> json) {
     return WeatherData(
-      temperature: json['temperature'].toDouble(),
-      windSpeed: json['windSpeed'].toDouble(),
-      weatherCode: json['weatherCode'],
-      lastUpdated: DateTime.parse(json['lastUpdated']),
+      temperature: (json['temperature'] as num).toDouble(),
+      windSpeed: (json['windSpeed'] as num).toDouble(),
+      weatherCode: json['weatherCode'] as int,
+      lastUpdated: DateTime.parse(json['lastUpdated'] as String),
       isCached: true,
     );
   }
